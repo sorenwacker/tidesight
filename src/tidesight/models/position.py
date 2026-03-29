@@ -20,7 +20,8 @@ class VesselPosition(Base):
         lat: Latitude in decimal degrees.
         lon: Longitude in decimal degrees.
         speed_knots: Speed over ground at this position.
-        heading: Heading in degrees at this position.
+        heading: True heading in degrees at this position.
+        cog: Course over ground in degrees.
         timestamp: When this position was recorded.
     """
 
@@ -32,6 +33,7 @@ class VesselPosition(Base):
     lon: Mapped[float] = mapped_column(Float, nullable=False)
     speed_knots: Mapped[float] = mapped_column(Float, default=0.0)
     heading: Mapped[float | None] = mapped_column(Float, nullable=True)
+    cog: Mapped[float | None] = mapped_column(Float, nullable=True)
     timestamp: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),

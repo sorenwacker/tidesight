@@ -89,6 +89,7 @@ async def handle_ais_message(message: AISMessage) -> None:
                     lon=vessel.lon,
                     speed_knots=vessel.speed_knots,
                     heading=vessel.heading,
+                    cog=vessel.cog,
                     timestamp=now,
                 )
                 session.add(position)

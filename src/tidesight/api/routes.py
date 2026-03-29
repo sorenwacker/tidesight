@@ -34,6 +34,7 @@ class PositionPoint(BaseModel):
     lon: float
     speed_knots: float
     heading: float | None
+    cog: float | None
     timestamp: datetime
 
 
@@ -43,6 +44,22 @@ class TrajectoryResponse(BaseModel):
     mmsi: int
     name: str | None
     positions: list[PositionPoint]
+
+
+class ReplayFrame(BaseModel):
+    """Single frame of replay data containing all vessel positions at a timestamp."""
+
+    timestamp: datetime
+    vessels: list[dict]
+
+
+class ReplayResponse(BaseModel):
+    """Replay data response."""
+
+    start_time: datetime
+    end_time: datetime
+    frame_count: int
+    frames: list[ReplayFrame]
 
 
 @router.get("/health", response_model=HealthResponse)
@@ -79,9 +96,16 @@ async def list_vessels(
     Returns:
         List of vessel data.
     """
-    # Only show vessels updated within max_age_minutes
+    # Only show vessels updated within max_age_minutes, with valid coordinates
     cutoff = datetime.now(timezone.utc) - timedelta(minutes=max_age_minutes)
-    query = select(Vessel).where(Vessel.updated_at >= cutoff).order_by(Vessel.updated_at.desc()).limit(limit)
+    query = (
+        select(Vessel)
+        .where(Vessel.updated_at >= cutoff)
+        .where(Vessel.lat != 0.0)
+        .where(Vessel.lon != 0.0)
+        .order_by(Vessel.updated_at.desc())
+        .limit(limit)
+    )
 
     if large_only:
         query = query.where(Vessel.is_large == True)  # noqa: E712
@@ -228,11 +252,124 @@ async def get_vessel_trajectory(
                 lon=p.lon,
                 speed_knots=p.speed_knots,
                 heading=p.heading,
+                cog=getattr(p, 'cog', None),
                 timestamp=p.timestamp,
             )
             for p in positions
         ],
     )
+
+
+@router.get("/replay", response_model=ReplayResponse)
+async def get_replay_data(
+    hours: int = Query(6, ge=1, le=48, description="Hours of history to replay"),
+    session: AsyncSession = Depends(get_session),
+) -> ReplayResponse:
+    """Get historical position data for replay.
+
+    Returns position snapshots grouped by timestamp for replay visualization.
+
+    Args:
+        hours: Number of hours of history to return.
+        session: Database session.
+
+    Returns:
+        Replay frames with vessel positions at each timestamp.
+    """
+    end_time = datetime.now(timezone.utc)
+    start_time = end_time - timedelta(hours=hours)
+
+    # Get all positions in time range
+    query = (
+        select(VesselPosition)
+        .where(VesselPosition.timestamp >= start_time)
+        .order_by(VesselPosition.timestamp)
+    )
+    result = await session.execute(query)
+    positions = result.scalars().all()
+
+    # Get vessel info for names
+    vessel_query = select(Vessel)
+    vessel_result = await session.execute(vessel_query)
+    vessels_db = {v.mmsi: v for v in vessel_result.scalars().all()}
+
+    # Group positions by timestamp (rounded to nearest 30 seconds)
+    frames_dict: dict[datetime, list[dict]] = {}
+    for p in positions:
+        # Round timestamp to 30 second intervals
+        ts = p.timestamp.replace(second=(p.timestamp.second // 30) * 30, microsecond=0)
+        if ts not in frames_dict:
+            frames_dict[ts] = []
+
+        vessel_info = vessels_db.get(p.mmsi)
+        frames_dict[ts].append({
+            "mmsi": p.mmsi,
+            "name": vessel_info.name if vessel_info else None,
+            "lat": p.lat,
+            "lon": p.lon,
+            "speed_knots": p.speed_knots,
+            "heading": p.heading,
+            "cog": getattr(p, 'cog', None),
+            "is_large": vessel_info.is_large if vessel_info else False,
+            "loa_m": vessel_info.loa_m if vessel_info else None,
+            "draft_m": vessel_info.draft_m if vessel_info else None,
+        })
+
+    # Convert to sorted frames
+    frames = [
+        ReplayFrame(timestamp=ts, vessels=vessels)
+        for ts, vessels in sorted(frames_dict.items())
+    ]
+
+    return ReplayResponse(
+        start_time=start_time,
+        end_time=end_time,
+        frame_count=len(frames),
+        frames=frames,
+    )
+
+
+@router.get("/replay/stats")
+async def get_replay_stats(
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Get statistics about available replay data.
+
+    Returns:
+        Stats including earliest/latest positions and total count.
+    """
+    from sqlalchemy import func
+
+    # Get count and time range
+    count_query = select(func.count(VesselPosition.id))
+    count_result = await session.execute(count_query)
+    total_positions = count_result.scalar() or 0
+
+    if total_positions == 0:
+        return {
+            "total_positions": 0,
+            "earliest": None,
+            "latest": None,
+            "hours_available": 0,
+        }
+
+    min_query = select(func.min(VesselPosition.timestamp))
+    max_query = select(func.max(VesselPosition.timestamp))
+
+    min_result = await session.execute(min_query)
+    max_result = await session.execute(max_query)
+
+    earliest = min_result.scalar()
+    latest = max_result.scalar()
+
+    hours_available = (latest - earliest).total_seconds() / 3600 if earliest and latest else 0
+
+    return {
+        "total_positions": total_positions,
+        "earliest": earliest.isoformat() if earliest else None,
+        "latest": latest.isoformat() if latest else None,
+        "hours_available": round(hours_available, 1),
+    }
 
 
 @router.get("/tides", response_model=TideResponse)

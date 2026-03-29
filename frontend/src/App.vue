@@ -4,6 +4,7 @@ import VesselMap from './components/VesselMap.vue'
 import TideTimeline from './components/TideTimeline.vue'
 import ArrivalsTable from './components/ArrivalsTable.vue'
 import AlertsPanel from './components/AlertsPanel.vue'
+import ReplayPanel from './components/ReplayPanel.vue'
 import { useWebSocket } from './composables/useWebSocket'
 import type { Vessel, TideData, Alert } from './types'
 
@@ -13,6 +14,8 @@ const tideData = ref<TideData | null>(null)
 const alerts = ref<Alert[]>([])
 const mapRef = ref<InstanceType<typeof VesselMap> | null>(null)
 const largeOnly = ref(true)  // Default: only show large vessels
+const isReplayMode = ref(false)
+const replayVessels = shallowRef<Vessel[]>([])
 
 const { connected, messages } = useWebSocket()
 
@@ -33,7 +36,9 @@ onBeforeMount(() => {
 
 // Convert map to array for components, apply filter
 const vessels = computed(() => {
-  const all = Array.from(vesselMap.value.values())
+  const all = isReplayMode.value
+    ? replayVessels.value
+    : Array.from(vesselMap.value.values())
   return largeOnly.value ? all.filter(v => v.is_large) : all
 })
 
@@ -84,6 +89,16 @@ async function fetchAlerts() {
 
 function handleLocate(vessel: Vessel) {
   mapRef.value?.locateVessel(vessel.mmsi)
+}
+
+function handleReplayFrame(frameVessels: Vessel[]) {
+  isReplayMode.value = true
+  replayVessels.value = frameVessels
+}
+
+function handleReplayStop() {
+  isReplayMode.value = false
+  replayVessels.value = []
 }
 
 // Throttle WebSocket updates
@@ -162,6 +177,7 @@ onMounted(() => {
           <span>Large only</span>
         </label>
         <span class="stat">{{ vessels.length }} shown</span>
+        <span v-if="isReplayMode" class="replay-badge">REPLAY</span>
       </div>
       <div class="header-right">
         <button class="theme-toggle" @click="toggleDarkMode" :title="darkMode ? 'Light mode' : 'Dark mode'">
@@ -182,6 +198,7 @@ onMounted(() => {
       <div class="side-panel">
         <ArrivalsTable :vessels="largeVessels" @locate="handleLocate" />
         <AlertsPanel :alerts="alerts" />
+        <ReplayPanel @frame="handleReplayFrame" @stop="handleReplayStop" />
       </div>
 
       <TideTimeline :tide-data="tideData" />
@@ -232,5 +249,14 @@ onMounted(() => {
 
 .theme-toggle:hover {
   background: var(--bg-color);
+}
+
+.replay-badge {
+  background: var(--warning-color);
+  color: #000;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.125rem 0.5rem;
+  border-radius: 4px;
 }
 </style>
