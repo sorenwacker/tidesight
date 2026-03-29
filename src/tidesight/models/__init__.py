@@ -1,6 +1,7 @@
 """Domain models for Tidesight."""
 
 from tidesight.models.alert import Alert, AlertSeverity, AlertType
+from tidesight.models.position import VesselPosition
 from tidesight.models.tide import HighTideWindow, TidePrediction
 from tidesight.models.vessel import Vessel
 
@@ -11,4 +12,5 @@ __all__ = [
     "HighTideWindow",
     "TidePrediction",
     "Vessel",
+    "VesselPosition",
 ]

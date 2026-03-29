@@ -3,6 +3,7 @@
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,10 +20,28 @@ from tidesight.api.schemas import (
     VesselResponse,
 )
 from tidesight.db.database import get_session
-from tidesight.models import Alert, HighTideWindow, TidePrediction, Vessel
+from tidesight.models import Alert, HighTideWindow, TidePrediction, Vessel, VesselPosition
 from tidesight.services.predictor import calculate_distance_to_entry
 
 router = APIRouter(prefix="/api")
+
+
+class PositionPoint(BaseModel):
+    """Single position in trajectory."""
+
+    lat: float
+    lon: float
+    speed_knots: float
+    heading: float | None
+    timestamp: datetime
+
+
+class TrajectoryResponse(BaseModel):
+    """Vessel trajectory response."""
+
+    mmsi: int
+    name: str | None
+    positions: list[PositionPoint]
 
 
 @router.get("/health", response_model=HealthResponse)
@@ -38,13 +57,19 @@ async def health_check() -> HealthResponse:
 )
 async def list_vessels(
     large_only: bool = Query(False, description="Filter to large vessels only"),
+    name: str | None = Query(None, description="Filter by vessel name (partial match)"),
+    min_speed: float | None = Query(None, description="Minimum speed in knots"),
+    max_distance: float | None = Query(None, description="Maximum distance from entry in nm"),
     limit: int = Query(100, ge=1, le=500, description="Maximum results"),
     session: AsyncSession = Depends(get_session),
 ) -> VesselListResponse:
-    """List all tracked vessels.
+    """List all tracked vessels with filters.
 
     Args:
         large_only: If True, only return large (tide-bound) vessels.
+        name: Filter by vessel name (case-insensitive partial match).
+        min_speed: Only return vessels moving faster than this speed.
+        max_distance: Only return vessels within this distance from entry.
         limit: Maximum number of vessels to return.
         session: Database session.
 
@@ -56,12 +81,23 @@ async def list_vessels(
     if large_only:
         query = query.where(Vessel.is_large == True)  # noqa: E712
 
+    if name:
+        query = query.where(Vessel.name.ilike(f"%{name}%"))
+
+    if min_speed is not None:
+        query = query.where(Vessel.speed_knots >= min_speed)
+
     result = await session.execute(query)
     vessels = result.scalars().all()
 
     vessel_responses = []
     for v in vessels:
         distance = calculate_distance_to_entry(v.lat, v.lon) if v.lat and v.lon else None
+
+        # Apply distance filter (post-query since it's calculated)
+        if max_distance is not None and distance is not None and distance > max_distance:
+            continue
+
         vessel_responses.append(
             VesselResponse(
                 mmsi=v.mmsi,
@@ -131,6 +167,66 @@ async def get_vessel(
         target_window=vessel.target_window,
         distance_nm=distance,
         updated_at=vessel.updated_at,
+    )
+
+
+@router.get(
+    "/vessels/{mmsi}/trajectory",
+    response_model=TrajectoryResponse,
+    responses={404: {"model": ErrorWrapper}},
+)
+async def get_vessel_trajectory(
+    mmsi: int,
+    hours: int = Query(6, ge=1, le=48, description="Hours of history"),
+    session: AsyncSession = Depends(get_session),
+) -> TrajectoryResponse:
+    """Get position history for a vessel to draw trajectory.
+
+    Args:
+        mmsi: Maritime Mobile Service Identity.
+        hours: Number of hours of history to return.
+        session: Database session.
+
+    Returns:
+        List of historical positions.
+
+    Raises:
+        HTTPException: If vessel not found.
+    """
+    # Get vessel info
+    vessel_result = await session.execute(select(Vessel).where(Vessel.mmsi == mmsi))
+    vessel = vessel_result.scalar_one_or_none()
+
+    if not vessel:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": {"code": "NOT_FOUND", "message": f"Vessel {mmsi} not found"}},
+        )
+
+    # Get position history
+    since = datetime.now(timezone.utc) - timedelta(hours=hours)
+    pos_query = (
+        select(VesselPosition)
+        .where(VesselPosition.mmsi == mmsi)
+        .where(VesselPosition.timestamp >= since)
+        .order_by(VesselPosition.timestamp)
+    )
+    pos_result = await session.execute(pos_query)
+    positions = pos_result.scalars().all()
+
+    return TrajectoryResponse(
+        mmsi=mmsi,
+        name=vessel.name,
+        positions=[
+            PositionPoint(
+                lat=p.lat,
+                lon=p.lon,
+                speed_knots=p.speed_knots,
+                heading=p.heading,
+                timestamp=p.timestamp,
+            )
+            for p in positions
+        ],
     )
 
 
