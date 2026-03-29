@@ -29,7 +29,7 @@ def parse_rws_response(raw_data: dict[str, Any]) -> list[dict[str, Any]]:
             timestamp_str = point[0]
             water_level = point[1]
 
-            timestamp = datetime.fromisoformat(timestamp_str)
+            timestamp = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
             if timestamp.tzinfo is None:
                 timestamp = timestamp.replace(tzinfo=timezone.utc)
 
@@ -121,9 +121,15 @@ class TideService:
             Tuple of (predictions, high_tides) where predictions is the
             raw time series and high_tides is the detected peak windows.
         """
+        now = datetime.now(timezone.utc)
+        start_date = now.strftime("%Y-%m-%dT%H:%M:%S.001Z")
+        end_date = (now + timedelta(days=2)).strftime("%Y-%m-%dT%H:%M:%S.001Z")
+
         params = {
             "mapType": "astronomische-getij",
             "locationCode": self.location_code,
+            "startDate": start_date,
+            "endDate": end_date,
         }
 
         try:

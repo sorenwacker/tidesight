@@ -49,7 +49,7 @@ function handleClick(vessel: Vessel) {
             </td>
             <td>{{ vessel.loa_m?.toFixed(0) || '-' }}m</td>
             <td>{{ vessel.draft_m?.toFixed(1) || '-' }}m</td>
-            <td>{{ formatDistance(vessel.distance_nm) }}nm</td>
+            <td>{{ formatDistance(vessel.distance_km) }}km</td>
           </tr>
         </tbody>
       </table>

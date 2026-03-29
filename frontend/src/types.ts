@@ -11,7 +11,7 @@ export interface Vessel {
   is_large: boolean
   eta: string | null
   target_window: string | null
-  distance_nm: number | null
+  distance_km: number | null
   updated_at: string
 }
 

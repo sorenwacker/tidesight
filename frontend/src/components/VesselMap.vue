@@ -37,7 +37,7 @@ function formatVesselPopup(vessel: Vessel): string {
   const speed = vessel.speed_knots?.toFixed(1) || '0'
   const draft = vessel.draft_m?.toFixed(1) || '-'
   const loa = vessel.loa_m?.toFixed(0) || '-'
-  const distance = vessel.distance_nm?.toFixed(1) || '-'
+  const distance = vessel.distance_km?.toFixed(1) || '-'
   const eta = vessel.eta
     ? new Date(vessel.eta).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
     : '-'
@@ -53,7 +53,7 @@ function formatVesselPopup(vessel: Vessel): string {
         <tr><td>Speed:</td><td>${speed} kn</td></tr>
         <tr><td>Draft:</td><td>${draft} m</td></tr>
         <tr><td>Length:</td><td>${loa} m</td></tr>
-        <tr><td>Distance:</td><td>${distance} nm</td></tr>
+        <tr><td>Distance:</td><td>${distance} km</td></tr>
         <tr><td>ETA:</td><td>${eta}</td></tr>
       </table>
     </div>

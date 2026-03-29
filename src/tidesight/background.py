@@ -96,7 +96,7 @@ async def handle_ais_message(message: AISMessage) -> None:
                 "heading": vessel.heading,
                 "is_large": vessel.is_large,
                 "eta": vessel.eta.isoformat() if vessel.eta else None,
-                "distance_nm": distance,
+                "distance_km": distance,
             })
             _broadcast_cache[message.mmsi] = now
 

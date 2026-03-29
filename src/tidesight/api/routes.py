@@ -116,7 +116,7 @@ async def list_vessels(
                 is_large=v.is_large,
                 eta=v.eta,
                 target_window=v.target_window,
-                distance_nm=distance,
+                distance_km=distance,
                 updated_at=v.updated_at,
             )
         )
@@ -169,7 +169,7 @@ async def get_vessel(
         is_large=vessel.is_large,
         eta=vessel.eta,
         target_window=vessel.target_window,
-        distance_nm=distance,
+        distance_km=distance,
         updated_at=vessel.updated_at,
     )
 

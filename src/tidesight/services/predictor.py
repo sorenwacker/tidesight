@@ -6,16 +6,19 @@ from typing import Any
 
 from tidesight.config import settings
 
-# Earth radius in nautical miles
-EARTH_RADIUS_NM = 3440.065
+# Earth radius in kilometers
+EARTH_RADIUS_KM = 6371.0
+
+# Conversion factor
+NM_TO_KM = 1.852
 
 # Hoek van Holland entry point coordinates
 HOEK_VAN_HOLLAND_LAT = 51.9792
 HOEK_VAN_HOLLAND_LON = 4.1167
 
 
-def haversine_nm(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    """Calculate great-circle distance between two points in nautical miles.
+def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Calculate great-circle distance between two points in kilometers.
 
     Uses the haversine formula for calculating distance on a sphere.
 
@@ -26,7 +29,7 @@ def haversine_nm(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
         lon2: Longitude of second point in decimal degrees.
 
     Returns:
-        Distance in nautical miles.
+        Distance in kilometers.
     """
     lat1_rad = math.radians(lat1)
     lat2_rad = math.radians(lat2)
@@ -39,7 +42,22 @@ def haversine_nm(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     )
     c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
-    return EARTH_RADIUS_NM * c
+    return EARTH_RADIUS_KM * c
+
+
+def haversine_nm(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Calculate great-circle distance between two points in nautical miles.
+
+    Args:
+        lat1: Latitude of first point in decimal degrees.
+        lon1: Longitude of first point in decimal degrees.
+        lat2: Latitude of second point in decimal degrees.
+        lon2: Longitude of second point in decimal degrees.
+
+    Returns:
+        Distance in nautical miles.
+    """
+    return haversine_km(lat1, lon1, lat2, lon2) / NM_TO_KM
 
 
 def is_large_vessel(
@@ -144,13 +162,13 @@ def find_target_window(
 
 
 def calculate_distance_to_entry(lat: float, lon: float) -> float:
-    """Calculate distance to Hoek van Holland entry point.
+    """Calculate distance to Hoek van Holland entry point in kilometers.
 
     Args:
         lat: Current latitude in decimal degrees.
         lon: Current longitude in decimal degrees.
 
     Returns:
-        Distance in nautical miles.
+        Distance in kilometers.
     """
-    return haversine_nm(lat, lon, HOEK_VAN_HOLLAND_LAT, HOEK_VAN_HOLLAND_LON)
+    return haversine_km(lat, lon, HOEK_VAN_HOLLAND_LAT, HOEK_VAN_HOLLAND_LON)

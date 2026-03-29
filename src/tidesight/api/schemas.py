@@ -21,7 +21,7 @@ class VesselResponse(BaseModel):
     is_large: bool = Field(False, description="Whether vessel is tide-bound")
     eta: Optional[datetime] = Field(None, description="Estimated time of arrival")
     target_window: Optional[datetime] = Field(None, description="Target tidal window")
-    distance_nm: Optional[float] = Field(None, description="Distance to entry in nm")
+    distance_km: Optional[float] = Field(None, description="Distance to entry in km")
     updated_at: datetime = Field(..., description="Last update timestamp")
 
     model_config = {"from_attributes": True}
