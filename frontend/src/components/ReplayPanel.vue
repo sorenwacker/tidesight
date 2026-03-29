@@ -85,7 +85,8 @@ function play() {
       currentFrameIndex.value++
       emitCurrentFrame()
     } else {
-      pause()
+      // Auto return to live when replay ends
+      stop()
     }
   }, 1000)
 }
