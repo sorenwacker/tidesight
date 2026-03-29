@@ -7,22 +7,33 @@ import AlertsPanel from './components/AlertsPanel.vue'
 import { useWebSocket } from './composables/useWebSocket'
 import type { Vessel, TideData, Alert } from './types'
 
-const vessels = ref<Vessel[]>([])
+// Store vessels as a Map for efficient updates
+const vesselMap = ref<Map<number, Vessel>>(new Map())
 const tideData = ref<TideData | null>(null)
 const alerts = ref<Alert[]>([])
 const selectedVessel = ref<Vessel | null>(null)
 
 const { connected, messages } = useWebSocket()
 
+// Convert map to array for components
+const vessels = computed(() => Array.from(vesselMap.value.values()))
+
 const largeVessels = computed(() =>
   vessels.value.filter(v => v.is_large)
 )
 
+const vesselCount = computed(() => vessels.value.length)
+const largeCount = computed(() => largeVessels.value.length)
+
 async function fetchVessels() {
   try {
-    const response = await fetch('/api/vessels')
+    const response = await fetch('/api/vessels?max_age_minutes=60&limit=500')
     const data = await response.json()
-    vessels.value = data.vessels
+
+    // Merge with existing vessels instead of replacing
+    for (const vessel of data.vessels) {
+      vesselMap.value.set(vessel.mmsi, vessel)
+    }
   } catch (error) {
     console.error('Failed to fetch vessels:', error)
   }
@@ -59,10 +70,13 @@ watch(messages, (newMessages) => {
   switch (latest.type) {
     case 'vessel_update':
       {
-        const update = latest.data as Partial<Vessel>
-        const index = vessels.value.findIndex(v => v.mmsi === update.mmsi)
-        if (index >= 0) {
-          vessels.value[index] = { ...vessels.value[index], ...update }
+        const update = latest.data as Partial<Vessel> & { mmsi: number }
+        const existing = vesselMap.value.get(update.mmsi)
+        if (existing) {
+          vesselMap.value.set(update.mmsi, { ...existing, ...update })
+        } else {
+          // Add new vessel from WebSocket
+          vesselMap.value.set(update.mmsi, update as Vessel)
         }
       }
       break
@@ -96,9 +110,13 @@ onMounted(() => {
   <div class="app">
     <header class="header">
       <h1>Tidesight</h1>
+      <div class="header-stats">
+        <span class="stat">{{ vesselCount }} vessels</span>
+        <span class="stat large">{{ largeCount }} large</span>
+      </div>
       <div class="connection-status">
         <span :class="['status-dot', connected ? 'connected' : 'disconnected']"></span>
-        <span>{{ connected ? 'Connected' : 'Disconnected' }}</span>
+        <span>{{ connected ? 'Live' : 'Offline' }}</span>
       </div>
     </header>
 
@@ -116,3 +134,20 @@ onMounted(() => {
     </main>
   </div>
 </template>
+
+<style scoped>
+.header-stats {
+  display: flex;
+  gap: 1rem;
+}
+
+.stat {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+.stat.large {
+  color: var(--danger-color);
+  font-weight: 500;
+}
+</style>

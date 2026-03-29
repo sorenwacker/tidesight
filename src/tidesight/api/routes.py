@@ -60,7 +60,8 @@ async def list_vessels(
     name: str | None = Query(None, description="Filter by vessel name (partial match)"),
     min_speed: float | None = Query(None, description="Minimum speed in knots"),
     max_distance: float | None = Query(None, description="Maximum distance from entry in nm"),
-    limit: int = Query(100, ge=1, le=500, description="Maximum results"),
+    max_age_minutes: int = Query(30, description="Max age of last update in minutes"),
+    limit: int = Query(500, ge=1, le=1000, description="Maximum results"),
     session: AsyncSession = Depends(get_session),
 ) -> VesselListResponse:
     """List all tracked vessels with filters.
@@ -70,13 +71,16 @@ async def list_vessels(
         name: Filter by vessel name (case-insensitive partial match).
         min_speed: Only return vessels moving faster than this speed.
         max_distance: Only return vessels within this distance from entry.
+        max_age_minutes: Only return vessels updated within this many minutes.
         limit: Maximum number of vessels to return.
         session: Database session.
 
     Returns:
         List of vessel data.
     """
-    query = select(Vessel).order_by(Vessel.updated_at.desc()).limit(limit)
+    # Only show vessels updated within max_age_minutes
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=max_age_minutes)
+    query = select(Vessel).where(Vessel.updated_at >= cutoff).order_by(Vessel.updated_at.desc()).limit(limit)
 
     if large_only:
         query = query.where(Vessel.is_large == True)  # noqa: E712
