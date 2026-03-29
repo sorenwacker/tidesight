@@ -12,11 +12,15 @@ const vesselMap = shallowRef<Map<number, Vessel>>(new Map())
 const tideData = ref<TideData | null>(null)
 const alerts = ref<Alert[]>([])
 const mapRef = ref<InstanceType<typeof VesselMap> | null>(null)
+const largeOnly = ref(true)  // Default: only show large vessels
 
 const { connected, messages } = useWebSocket()
 
-// Convert map to array for components
-const vessels = computed(() => Array.from(vesselMap.value.values()))
+// Convert map to array for components, apply filter
+const vessels = computed(() => {
+  const all = Array.from(vesselMap.value.values())
+  return largeOnly.value ? all.filter(v => v.is_large) : all
+})
 
 const largeVessels = computed(() =>
   vessels.value.filter(v => v.is_large).slice(0, 50)
@@ -134,9 +138,12 @@ onMounted(() => {
   <div class="app">
     <header class="header">
       <h1>Tidesight</h1>
-      <div class="header-stats">
-        <span class="stat">{{ vesselCount }} vessels</span>
-        <span class="stat large">{{ largeCount }} large</span>
+      <div class="header-controls">
+        <label class="toggle">
+          <input type="checkbox" v-model="largeOnly">
+          <span>Large only</span>
+        </label>
+        <span class="stat">{{ vessels.length }} shown</span>
       </div>
       <div class="connection-status">
         <span :class="['status-dot', connected ? 'connected' : 'disconnected']"></span>
@@ -160,18 +167,27 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.header-stats {
+.header-controls {
   display: flex;
+  align-items: center;
   gap: 1rem;
+}
+
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  font-size: 0.875rem;
+}
+
+.toggle input {
+  width: 16px;
+  height: 16px;
 }
 
 .stat {
   font-size: 0.875rem;
   color: var(--text-muted);
-}
-
-.stat.large {
-  color: var(--danger-color);
-  font-weight: 500;
 }
 </style>
