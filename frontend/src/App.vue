@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch, shallowRef } from 'vue'
+import { ref, computed, onMounted, watch, shallowRef, onBeforeMount } from 'vue'
 import VesselMap from './components/VesselMap.vue'
 import TideTimeline from './components/TideTimeline.vue'
 import ArrivalsTable from './components/ArrivalsTable.vue'
@@ -15,6 +15,21 @@ const mapRef = ref<InstanceType<typeof VesselMap> | null>(null)
 const largeOnly = ref(true)  // Default: only show large vessels
 
 const { connected, messages } = useWebSocket()
+
+// Dark mode
+const darkMode = ref(localStorage.getItem('theme') === 'dark')
+
+function toggleDarkMode() {
+  darkMode.value = !darkMode.value
+  document.documentElement.setAttribute('data-theme', darkMode.value ? 'dark' : 'light')
+  localStorage.setItem('theme', darkMode.value ? 'dark' : 'light')
+}
+
+onBeforeMount(() => {
+  if (darkMode.value) {
+    document.documentElement.setAttribute('data-theme', 'dark')
+  }
+})
 
 // Convert map to array for components, apply filter
 const vessels = computed(() => {
@@ -148,9 +163,14 @@ onMounted(() => {
         </label>
         <span class="stat">{{ vessels.length }} shown</span>
       </div>
-      <div class="connection-status">
-        <span :class="['status-dot', connected ? 'connected' : 'disconnected']"></span>
-        <span>{{ connected ? 'Live' : 'Offline' }}</span>
+      <div class="header-right">
+        <button class="theme-toggle" @click="toggleDarkMode" :title="darkMode ? 'Light mode' : 'Dark mode'">
+          {{ darkMode ? 'Light' : 'Dark' }}
+        </button>
+        <div class="connection-status">
+          <span :class="['status-dot', connected ? 'connected' : 'disconnected']"></span>
+          <span>{{ connected ? 'Live' : 'Offline' }}</span>
+        </div>
       </div>
     </header>
 
@@ -176,6 +196,12 @@ onMounted(() => {
   gap: 1rem;
 }
 
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
 .toggle {
   display: flex;
   align-items: center;
@@ -192,5 +218,19 @@ onMounted(() => {
 .stat {
   font-size: 0.875rem;
   color: var(--text-muted);
+}
+
+.theme-toggle {
+  padding: 0.375rem 0.75rem;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--card-bg);
+  color: var(--text-color);
+  cursor: pointer;
+  font-size: 0.875rem;
+}
+
+.theme-toggle:hover {
+  background: var(--bg-color);
 }
 </style>
