@@ -87,7 +87,7 @@ function play() {
     } else {
       pause()
     }
-  }, 500)
+  }, 1000)
 }
 
 function pause() {

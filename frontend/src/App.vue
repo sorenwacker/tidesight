@@ -93,12 +93,19 @@ function handleLocate(vessel: Vessel) {
 
 function handleReplayFrame(frameVessels: Vessel[]) {
   isReplayMode.value = true
-  replayVessels.value = frameVessels
+  // Merge vessels instead of replacing to avoid blinking
+  const newMap = new Map(replayVessels.value.map(v => [v.mmsi, v]))
+  for (const vessel of frameVessels) {
+    newMap.set(vessel.mmsi, vessel)
+  }
+  replayVessels.value = Array.from(newMap.values())
 }
 
 function handleReplayStop() {
   isReplayMode.value = false
   replayVessels.value = []
+  // Refresh live data
+  fetchVessels()
 }
 
 // Throttle WebSocket updates
