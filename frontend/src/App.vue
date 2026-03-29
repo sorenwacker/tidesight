@@ -23,7 +23,10 @@ const vessels = computed(() => {
 })
 
 const largeVessels = computed(() =>
-  vessels.value.filter(v => v.is_large).slice(0, 50)
+  vessels.value
+    .filter(v => v.is_large)
+    .sort((a, b) => (b.loa_m || 0) - (a.loa_m || 0))
+    .slice(0, 50)
 )
 
 const vesselCount = computed(() => vesselMap.value.size)

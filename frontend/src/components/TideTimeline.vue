@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
+import { ref, watch } from 'vue'
 import { Chart, registerables } from 'chart.js'
 import type { TideData } from '../types'
 
@@ -95,13 +95,11 @@ function renderChart() {
   })
 }
 
-onMounted(() => {
-  if (props.tideData) {
+watch(() => props.tideData, (newData) => {
+  if (newData && newData.predictions?.length) {
     renderChart()
   }
-})
-
-watch(() => props.tideData, renderChart, { deep: true })
+}, { immediate: true })
 </script>
 
 <template>
@@ -110,8 +108,8 @@ watch(() => props.tideData, renderChart, { deep: true })
       Tidal Predictions - {{ tideData?.location || 'Hoek van Holland' }}
     </div>
     <div class="card-body chart-container">
-      <canvas ref="chartCanvas"></canvas>
-      <div v-if="!tideData" class="empty-state">
+      <canvas v-show="tideData" ref="chartCanvas"></canvas>
+      <div v-if="!tideData || !tideData.predictions?.length" class="empty-state">
         Loading tidal data...
       </div>
     </div>
@@ -122,5 +120,10 @@ watch(() => props.tideData, renderChart, { deep: true })
 .chart-container {
   height: 250px;
   position: relative;
+}
+
+.chart-container canvas {
+  width: 100% !important;
+  height: 100% !important;
 }
 </style>
