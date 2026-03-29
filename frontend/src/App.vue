@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, shallowRef } from 'vue'
 import VesselMap from './components/VesselMap.vue'
 import TideTimeline from './components/TideTimeline.vue'
 import ArrivalsTable from './components/ArrivalsTable.vue'
@@ -7,11 +7,11 @@ import AlertsPanel from './components/AlertsPanel.vue'
 import { useWebSocket } from './composables/useWebSocket'
 import type { Vessel, TideData, Alert } from './types'
 
-// Store vessels as a Map for efficient updates
-const vesselMap = ref<Map<number, Vessel>>(new Map())
+// Use shallowRef for better performance with large arrays
+const vesselMap = shallowRef<Map<number, Vessel>>(new Map())
 const tideData = ref<TideData | null>(null)
 const alerts = ref<Alert[]>([])
-const selectedVessel = ref<Vessel | null>(null)
+const mapRef = ref<InstanceType<typeof VesselMap> | null>(null)
 
 const { connected, messages } = useWebSocket()
 
@@ -19,21 +19,23 @@ const { connected, messages } = useWebSocket()
 const vessels = computed(() => Array.from(vesselMap.value.values()))
 
 const largeVessels = computed(() =>
-  vessels.value.filter(v => v.is_large)
+  vessels.value.filter(v => v.is_large).slice(0, 50)
 )
 
-const vesselCount = computed(() => vessels.value.length)
+const vesselCount = computed(() => vesselMap.value.size)
 const largeCount = computed(() => largeVessels.value.length)
 
 async function fetchVessels() {
   try {
-    const response = await fetch('/api/vessels?max_age_minutes=60&limit=500')
+    const response = await fetch('/api/vessels?max_age_minutes=30&limit=300')
     const data = await response.json()
 
-    // Merge with existing vessels instead of replacing
+    // Replace map to trigger reactivity
+    const newMap = new Map(vesselMap.value)
     for (const vessel of data.vessels) {
-      vesselMap.value.set(vessel.mmsi, vessel)
+      newMap.set(vessel.mmsi, vessel)
     }
+    vesselMap.value = newMap
   } catch (error) {
     console.error('Failed to fetch vessels:', error)
   }
@@ -58,11 +60,31 @@ async function fetchAlerts() {
   }
 }
 
-function handleVesselSelect(vessel: Vessel) {
-  selectedVessel.value = vessel
+function handleLocate(vessel: Vessel) {
+  mapRef.value?.locateVessel(vessel.mmsi)
 }
 
-// Process WebSocket messages
+// Throttle WebSocket updates
+let updateQueue: Map<number, Partial<Vessel>> = new Map()
+let updateTimer: number | null = null
+
+function processUpdateQueue() {
+  if (updateQueue.size === 0) return
+
+  const newMap = new Map(vesselMap.value)
+  for (const [mmsi, update] of updateQueue) {
+    const existing = newMap.get(mmsi)
+    if (existing) {
+      newMap.set(mmsi, { ...existing, ...update })
+    } else {
+      newMap.set(mmsi, update as Vessel)
+    }
+  }
+  vesselMap.value = newMap
+  updateQueue.clear()
+}
+
+// Process WebSocket messages with throttling
 watch(messages, (newMessages) => {
   const latest = newMessages[newMessages.length - 1]
   if (!latest) return
@@ -71,12 +93,14 @@ watch(messages, (newMessages) => {
     case 'vessel_update':
       {
         const update = latest.data as Partial<Vessel> & { mmsi: number }
-        const existing = vesselMap.value.get(update.mmsi)
-        if (existing) {
-          vesselMap.value.set(update.mmsi, { ...existing, ...update })
-        } else {
-          // Add new vessel from WebSocket
-          vesselMap.value.set(update.mmsi, update as Vessel)
+        updateQueue.set(update.mmsi, update)
+
+        // Batch updates every 2 seconds
+        if (!updateTimer) {
+          updateTimer = window.setTimeout(() => {
+            processUpdateQueue()
+            updateTimer = null
+          }, 2000)
         }
       }
       break
@@ -100,7 +124,7 @@ onMounted(() => {
   fetchAlerts()
 
   // Refresh data periodically
-  setInterval(fetchVessels, 30000)
+  setInterval(fetchVessels, 60000)  // Every 60s instead of 30s
   setInterval(fetchTides, 3600000)
   setInterval(fetchAlerts, 60000)
 })
@@ -122,11 +146,11 @@ onMounted(() => {
 
     <main class="main-content">
       <div class="map-container">
-        <VesselMap :vessels="vessels" @select="handleVesselSelect" />
+        <VesselMap ref="mapRef" :vessels="vessels" />
       </div>
 
       <div class="side-panel">
-        <ArrivalsTable :vessels="largeVessels" />
+        <ArrivalsTable :vessels="largeVessels" @locate="handleLocate" />
         <AlertsPanel :alerts="alerts" />
       </div>
 

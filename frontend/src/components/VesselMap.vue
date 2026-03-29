@@ -106,6 +106,18 @@ function updateMarkers() {
   }
 }
 
+// Expose method to locate a vessel on the map
+function locateVessel(mmsi: number) {
+  const marker = markers.get(mmsi)
+  if (marker && map) {
+    map.setView(marker.getLatLng(), 12, { animate: true })
+    marker.openPopup()
+  }
+}
+
+// Expose the method to parent
+defineExpose({ locateVessel })
+
 onMounted(() => {
   if (!mapContainer.value) return
 
