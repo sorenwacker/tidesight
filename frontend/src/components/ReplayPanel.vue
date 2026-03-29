@@ -8,9 +8,6 @@ interface ReplayFrame {
 }
 
 interface ReplayData {
-  start_time: string
-  end_time: string
-  frame_count: number
   frames: ReplayFrame[]
 }
 
@@ -20,162 +17,141 @@ const emit = defineEmits<{
 }>()
 
 const isLoading = ref(false)
-const isPlaying = ref(false)
 const replayData = ref<ReplayData | null>(null)
-const currentFrameIndex = ref(0)
-const hoursToLoad = ref(1)
-const error = ref('')
+const frameIndex = ref(0)
+const isPlaying = ref(false)
 
-let playInterval: number | null = null
+let timer: number | null = null
 
-const hasData = computed(() => replayData.value && replayData.value.frames.length > 0)
-
+const inReplay = computed(() => replayData.value !== null)
+const frameCount = computed(() => replayData.value?.frames.length || 0)
 const currentTime = computed(() => {
-  if (!hasData.value) return ''
-  const frame = replayData.value!.frames[currentFrameIndex.value]
-  return new Date(frame.timestamp).toLocaleTimeString('en-GB', {
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  })
+  if (!replayData.value || frameCount.value === 0) return ''
+  return new Date(replayData.value.frames[frameIndex.value].timestamp)
+    .toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
 })
 
-const progress = computed(() => {
-  if (!hasData.value) return 0
-  return currentFrameIndex.value
-})
-
-const maxFrames = computed(() => {
-  return hasData.value ? replayData.value!.frames.length - 1 : 0
-})
-
-async function loadAndPlay() {
-  error.value = ''
+async function startReplay() {
   isLoading.value = true
-  stop()
-
   try {
-    const res = await fetch(`/api/replay?hours=${hoursToLoad.value}`)
-    if (!res.ok) throw new Error('Failed to load')
-
+    const res = await fetch('/api/replay?hours=1')
     const data = await res.json()
-    replayData.value = data
-    currentFrameIndex.value = 0
-
-    if (data.frames.length > 0) {
+    if (data.frames && data.frames.length > 0) {
+      replayData.value = data
+      frameIndex.value = 0
+      showFrame()
       play()
-    } else {
-      error.value = 'No data available'
     }
-  } catch (err) {
-    error.value = 'Failed to load replay data'
-    console.error(err)
-  } finally {
-    isLoading.value = false
+  } catch (e) {
+    console.error('Replay failed:', e)
+  }
+  isLoading.value = false
+}
+
+function showFrame() {
+  if (replayData.value && frameIndex.value < frameCount.value) {
+    emit('frame', replayData.value.frames[frameIndex.value].vessels as Vessel[])
   }
 }
 
 function play() {
-  if (!hasData.value) return
   isPlaying.value = true
-  emitCurrentFrame()
-
-  playInterval = window.setInterval(() => {
-    if (currentFrameIndex.value < replayData.value!.frames.length - 1) {
-      currentFrameIndex.value++
-      emitCurrentFrame()
+  timer = window.setInterval(() => {
+    if (frameIndex.value < frameCount.value - 1) {
+      frameIndex.value++
+      showFrame()
     } else {
-      // Auto return to live when replay ends
-      stop()
+      backToLive()
     }
-  }, 1000)
+  }, 800)
 }
 
 function pause() {
   isPlaying.value = false
-  if (playInterval) {
-    clearInterval(playInterval)
-    playInterval = null
-  }
+  if (timer) clearInterval(timer)
+  timer = null
 }
 
-function stop() {
+function backToLive() {
   pause()
   replayData.value = null
-  currentFrameIndex.value = 0
+  frameIndex.value = 0
   emit('stop')
 }
 
-function emitCurrentFrame() {
-  if (hasData.value) {
-    emit('frame', replayData.value!.frames[currentFrameIndex.value].vessels as Vessel[])
-  }
-}
-
-function seek(e: Event) {
-  const target = e.target as HTMLInputElement
-  currentFrameIndex.value = parseInt(target.value, 10)
-  emitCurrentFrame()
+function onSlide(e: Event) {
+  frameIndex.value = parseInt((e.target as HTMLInputElement).value)
+  showFrame()
 }
 </script>
 
 <template>
-  <div class="card">
-    <div class="card-header">Replay</div>
-    <div class="card-body">
-      <div v-if="!hasData" class="load-controls">
-        <select v-model="hoursToLoad" class="select">
-          <option :value="1">1 hour</option>
-          <option :value="3">3 hours</option>
-          <option :value="6">6 hours</option>
-        </select>
-        <button @click="loadAndPlay" :disabled="isLoading" class="btn btn-primary">
-          {{ isLoading ? 'Loading...' : 'Replay' }}
-        </button>
-      </div>
-
-      <div v-else class="playback">
-        <div class="time">{{ currentTime }}</div>
-        <input
-          type="range"
-          :min="0"
-          :max="maxFrames"
-          :value="progress"
-          @input="seek"
-          class="slider"
-        />
-        <div class="controls">
-          <button v-if="!isPlaying" @click="play" class="btn">Play</button>
-          <button v-else @click="pause" class="btn">Pause</button>
-          <button @click="stop" class="btn btn-live">Back to Live</button>
+  <div class="replay">
+    <template v-if="!inReplay">
+      <button @click="startReplay" :disabled="isLoading" class="btn-replay">
+        {{ isLoading ? 'Loading...' : 'Replay Last Hour' }}
+      </button>
+    </template>
+    <template v-else>
+      <div class="replay-active">
+        <span class="time">{{ currentTime }}</span>
+        <input type="range" :min="0" :max="frameCount - 1" :value="frameIndex" @input="onSlide" />
+        <div class="btns">
+          <button v-if="isPlaying" @click="pause">Pause</button>
+          <button v-else @click="play">Play</button>
+          <button @click="backToLive" class="btn-live">Live</button>
         </div>
       </div>
-
-      <div v-if="error" class="error">{{ error }}</div>
-    </div>
+    </template>
   </div>
 </template>
 
 <style scoped>
-.card-body {
-  padding: 0.75rem;
+.replay {
+  padding: 0.5rem;
+  background: var(--card-bg);
+  border-radius: 6px;
+  margin-top: 0.5rem;
 }
 
-.load-controls {
+.btn-replay {
+  width: 100%;
+  padding: 0.5rem;
+  background: var(--primary-color);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.btn-replay:disabled {
+  opacity: 0.5;
+}
+
+.replay-active {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.time {
+  text-align: center;
+  font-weight: bold;
+  font-size: 1.1rem;
+}
+
+input[type="range"] {
+  width: 100%;
+}
+
+.btns {
   display: flex;
   gap: 0.5rem;
 }
 
-.select {
-  padding: 0.375rem 0.5rem;
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
-  background: var(--card-bg);
-  color: var(--text-color);
-}
-
-.btn {
-  padding: 0.375rem 0.75rem;
+.btns button {
+  flex: 1;
+  padding: 0.4rem;
   border: 1px solid var(--border-color);
   border-radius: 4px;
   background: var(--card-bg);
@@ -183,52 +159,9 @@ function seek(e: Event) {
   cursor: pointer;
 }
 
-.btn:hover {
-  background: var(--bg-color);
-}
-
-.btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.btn-primary {
-  background: var(--primary-color);
-  color: white;
-  border-color: var(--primary-color);
-}
-
 .btn-live {
-  background: var(--success-color);
-  color: white;
-  border-color: var(--success-color);
-}
-
-.playback {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.time {
-  font-size: 1.25rem;
-  font-weight: 600;
-  text-align: center;
-}
-
-.slider {
-  width: 100%;
-}
-
-.controls {
-  display: flex;
-  gap: 0.5rem;
-  justify-content: center;
-}
-
-.error {
-  color: var(--danger-color);
-  font-size: 0.75rem;
-  margin-top: 0.5rem;
+  background: var(--success-color) !important;
+  color: white !important;
+  border-color: var(--success-color) !important;
 }
 </style>

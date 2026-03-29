@@ -1,10 +1,15 @@
 """Alerter service for detecting vessel clusters."""
 
+import uuid
 from collections import defaultdict
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from tidesight.models import Alert, Vessel
 from tidesight.models.alert import AlertSeverity
 
 
