@@ -3,11 +3,12 @@
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
-from fastapi import FastAPI
+from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 
 from tidesight import __version__
 from tidesight.api.routes import router
+from tidesight.api.websocket import websocket_endpoint
 from tidesight.db.database import init_db
 
 
@@ -39,3 +40,9 @@ app.add_middleware(
 
 # Include API routes
 app.include_router(router)
+
+
+@app.websocket("/ws/live")
+async def ws_live(websocket: WebSocket) -> None:
+    """WebSocket endpoint for live vessel updates."""
+    await websocket_endpoint(websocket)
