@@ -17,7 +17,7 @@ const markers = new Map<number, L.Marker>()
 
 // Hoek van Holland center
 const CENTER: L.LatLngTuple = [51.98, 4.1]
-const ZOOM = 11
+const ZOOM = 10
 
 function createMarkerIcon(isLarge: boolean): L.DivIcon {
   const color = isLarge ? '#dc2626' : '#2563eb'
@@ -29,6 +29,34 @@ function createMarkerIcon(isLarge: boolean): L.DivIcon {
     iconSize: [24, 24],
     iconAnchor: [12, 12],
   })
+}
+
+function formatVesselPopup(vessel: Vessel): string {
+  const name = vessel.name || `MMSI: ${vessel.mmsi}`
+  const speed = vessel.speed_knots?.toFixed(1) || '0'
+  const draft = vessel.draft_m?.toFixed(1) || '-'
+  const loa = vessel.loa_m?.toFixed(0) || '-'
+  const distance = vessel.distance_nm?.toFixed(1) || '-'
+  const eta = vessel.eta
+    ? new Date(vessel.eta).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+    : '-'
+  const type = vessel.is_large ? '<span style="color:#dc2626">Large (tide-bound)</span>' : 'Regular'
+
+  return `
+    <div style="min-width: 200px">
+      <strong style="font-size: 14px">${name}</strong><br>
+      <small style="color: #666">MMSI: ${vessel.mmsi}</small>
+      <hr style="margin: 8px 0; border: none; border-top: 1px solid #eee">
+      <table style="font-size: 12px; width: 100%">
+        <tr><td>Type:</td><td>${type}</td></tr>
+        <tr><td>Speed:</td><td>${speed} kn</td></tr>
+        <tr><td>Draft:</td><td>${draft} m</td></tr>
+        <tr><td>Length:</td><td>${loa} m</td></tr>
+        <tr><td>Distance:</td><td>${distance} nm</td></tr>
+        <tr><td>ETA:</td><td>${eta}</td></tr>
+      </table>
+    </div>
+  `
 }
 
 function updateMarkers() {
@@ -51,16 +79,24 @@ function updateMarkers() {
     if (existing) {
       existing.setLatLng([vessel.lat, vessel.lon])
       existing.setIcon(createMarkerIcon(vessel.is_large))
+      existing.setPopupContent(formatVesselPopup(vessel))
+
+      // Rotate marker based on heading
       if (vessel.heading !== null) {
         const iconElement = existing.getElement()
         if (iconElement) {
-          iconElement.style.transform += ` rotate(${vessel.heading}deg)`
+          iconElement.style.transformOrigin = 'center'
+          iconElement.style.transform = `rotate(${vessel.heading}deg)`
         }
       }
     } else {
       const marker = L.marker([vessel.lat, vessel.lon], {
         icon: createMarkerIcon(vessel.is_large),
         title: vessel.name || `MMSI: ${vessel.mmsi}`,
+      })
+
+      marker.bindPopup(formatVesselPopup(vessel), {
+        maxWidth: 300,
       })
 
       marker.on('click', () => emit('select', vessel))
@@ -85,7 +121,7 @@ onMounted(() => {
     fillColor: '#10b981',
     fillOpacity: 0.2,
     radius: 500,
-  }).addTo(map).bindPopup('Hoek van Holland Entry')
+  }).addTo(map).bindPopup('Hoek van Holland Entry Point')
 
   updateMarkers()
 })
@@ -110,5 +146,14 @@ watch(() => props.vessels, updateMarkers, { deep: true })
 
 :deep(.vessel-marker svg) {
   filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.3));
+  transition: transform 0.3s ease;
+}
+
+:deep(.leaflet-popup-content-wrapper) {
+  border-radius: 8px;
+}
+
+:deep(.leaflet-popup-content) {
+  margin: 12px;
 }
 </style>
