@@ -22,7 +22,7 @@ class Settings(BaseSettings):
 
     ais_api_key: str = ""
     ais_ws_url: str = "wss://stream.aisstream.io/v0/stream"
-    ais_bounding_box: list[list[float]] = [[51.95, 3.8], [52.05, 4.2]]
+    ais_bounding_box: list[list[float]] = [[51.5, 2.5], [52.5, 5.0]]
 
     rws_api_url: str = "https://waterinfo.rws.nl/api/chart/get"
     rws_location_code: str = "Hoek van Holland(HOEKVHLD)"
