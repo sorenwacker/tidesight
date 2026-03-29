@@ -19,9 +19,10 @@ const markers = new Map<number, L.Marker>()
 const CENTER: L.LatLngTuple = [51.98, 4.1]
 const ZOOM = 10
 
-function createMarkerIcon(isLarge: boolean, heading: number | null): L.DivIcon {
+function createMarkerIcon(isLarge: boolean, heading: number | null, cog: number | null, speed: number): L.DivIcon {
   const color = isLarge ? '#dc2626' : '#2563eb'
-  const rotation = heading !== null ? heading : 0
+  // Use COG (actual direction of travel) when moving, heading when stationary
+  const rotation = speed > 0.5 && cog !== null ? cog : (heading ?? 0)
   return L.divIcon({
     className: 'vessel-marker',
     html: `<svg width="24" height="24" viewBox="0 0 24 24" fill="${color}" style="transform: rotate(${rotation}deg)">
@@ -79,11 +80,11 @@ function updateMarkers() {
 
     if (existing) {
       existing.setLatLng([vessel.lat, vessel.lon])
-      existing.setIcon(createMarkerIcon(vessel.is_large, vessel.heading))
+      existing.setIcon(createMarkerIcon(vessel.is_large, vessel.heading, vessel.cog, vessel.speed_knots))
       existing.setPopupContent(formatVesselPopup(vessel))
     } else {
       const marker = L.marker([vessel.lat, vessel.lon], {
-        icon: createMarkerIcon(vessel.is_large, vessel.heading),
+        icon: createMarkerIcon(vessel.is_large, vessel.heading, vessel.cog, vessel.speed_knots),
         title: vessel.name || `MMSI: ${vessel.mmsi}`,
       })
 

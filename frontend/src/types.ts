@@ -5,6 +5,7 @@ export interface Vessel {
   lon: number
   speed_knots: number
   heading: number | null
+  cog: number | null
   draft_m: number | null
   loa_m: number | null
   beam_m: number | null

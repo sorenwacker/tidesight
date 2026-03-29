@@ -172,3 +172,63 @@ def calculate_distance_to_entry(lat: float, lon: float) -> float:
         Distance in kilometers.
     """
     return haversine_km(lat, lon, HOEK_VAN_HOLLAND_LAT, HOEK_VAN_HOLLAND_LON)
+
+
+def calculate_bearing(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Calculate initial bearing from point 1 to point 2.
+
+    Args:
+        lat1: Latitude of starting point.
+        lon1: Longitude of starting point.
+        lat2: Latitude of destination.
+        lon2: Longitude of destination.
+
+    Returns:
+        Bearing in degrees (0-360, where 0=North, 90=East).
+    """
+    lat1_rad = math.radians(lat1)
+    lat2_rad = math.radians(lat2)
+    delta_lon = math.radians(lon2 - lon1)
+
+    x = math.sin(delta_lon) * math.cos(lat2_rad)
+    y = math.cos(lat1_rad) * math.sin(lat2_rad) - math.sin(lat1_rad) * math.cos(
+        lat2_rad
+    ) * math.cos(delta_lon)
+
+    bearing = math.degrees(math.atan2(x, y))
+    return (bearing + 360) % 360
+
+
+def is_heading_towards_entry(
+    lat: float,
+    lon: float,
+    cog: float | None,
+    tolerance_degrees: float = 90.0,
+) -> bool:
+    """Check if vessel is heading towards Hoek van Holland.
+
+    Compares the vessel's course over ground to the bearing towards the entry point.
+    Returns True if the vessel is heading within tolerance degrees of the target.
+
+    Args:
+        lat: Current latitude.
+        lon: Current longitude.
+        cog: Course over ground in degrees (0-360).
+        tolerance_degrees: Maximum angle difference to consider "heading towards".
+
+    Returns:
+        True if vessel is heading towards the entry point.
+    """
+    if cog is None:
+        return False
+
+    bearing_to_entry = calculate_bearing(
+        lat, lon, HOEK_VAN_HOLLAND_LAT, HOEK_VAN_HOLLAND_LON
+    )
+
+    # Calculate angular difference (accounting for wrap-around at 360)
+    diff = abs(cog - bearing_to_entry)
+    if diff > 180:
+        diff = 360 - diff
+
+    return diff <= tolerance_degrees

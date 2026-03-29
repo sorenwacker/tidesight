@@ -16,6 +16,7 @@ from tidesight.services.predictor import (
     calculate_distance_to_entry,
     calculate_eta,
     find_target_window,
+    is_heading_towards_entry,
     is_large_vessel,
 )
 from tidesight.services.tide_service import TideService
@@ -59,10 +60,13 @@ async def handle_ais_message(message: AISMessage) -> None:
             vessel.lon = message.data["lon"]
             vessel.speed_knots = message.data.get("speed_knots", 0.0)
             vessel.heading = message.data.get("heading")
+            vessel.cog = message.data.get("cog")
             vessel.updated_at = now
 
-            # Calculate ETA if moving
-            if vessel.speed_knots > 0.5:
+            # Calculate ETA only if moving towards Hoek van Holland
+            if vessel.speed_knots > 0.5 and is_heading_towards_entry(
+                vessel.lat, vessel.lon, vessel.cog
+            ):
                 vessel.eta = calculate_eta(
                     vessel.lat, vessel.lon, vessel.speed_knots
                 )
@@ -71,6 +75,10 @@ async def handle_ais_message(message: AISMessage) -> None:
                     target = find_target_window(vessel.eta, _tidal_windows)
                     if target:
                         vessel.target_window = target["peak_time"]
+            else:
+                # Clear ETA if not heading towards entry
+                vessel.eta = None
+                vessel.target_window = None
 
             # Save position history (throttled)
             last_save = _position_cache.get(message.mmsi)
@@ -108,6 +116,7 @@ async def handle_ais_message(message: AISMessage) -> None:
                 "lon": vessel.lon,
                 "speed_knots": vessel.speed_knots,
                 "heading": vessel.heading,
+                "cog": vessel.cog,
                 "draft_m": vessel.draft_m,
                 "loa_m": vessel.loa_m,
                 "beam_m": vessel.beam_m,

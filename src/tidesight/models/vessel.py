@@ -22,7 +22,8 @@ class Vessel(Base):
         lat: Latitude in decimal degrees.
         lon: Longitude in decimal degrees.
         speed_knots: Speed over ground in knots.
-        heading: Heading in degrees (0-360).
+        heading: True heading in degrees (where bow points).
+        cog: Course over ground in degrees (actual direction of travel).
         draft_m: Current draft in meters.
         loa_m: Length overall in meters.
         beam_m: Beam (width) in meters.
@@ -39,6 +40,7 @@ class Vessel(Base):
     lon: Mapped[float] = mapped_column(Float, nullable=False)
     speed_knots: Mapped[float] = mapped_column(Float, default=0.0)
     heading: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    cog: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     draft_m: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     loa_m: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     beam_m: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
