@@ -177,15 +177,18 @@ onMounted(() => {
           <span>Large only</span>
         </label>
         <span class="stat">{{ vessels.length }} shown</span>
-        <span v-if="isReplayMode" class="replay-badge">REPLAY</span>
+        <button v-if="isReplayMode" class="btn-live" @click="handleReplayStop">Back to Live</button>
       </div>
       <div class="header-right">
         <button class="theme-toggle" @click="toggleDarkMode" :title="darkMode ? 'Light mode' : 'Dark mode'">
           {{ darkMode ? 'Light' : 'Dark' }}
         </button>
         <div class="connection-status">
-          <span :class="['status-dot', connected ? 'connected' : 'disconnected']"></span>
-          <span>{{ connected ? 'Live' : 'Offline' }}</span>
+          <span v-if="isReplayMode" class="status-replay">REPLAY</span>
+          <template v-else>
+            <span :class="['status-dot', connected ? 'connected' : 'disconnected']"></span>
+            <span>{{ connected ? 'Live' : 'Offline' }}</span>
+          </template>
         </div>
       </div>
     </header>
@@ -251,12 +254,27 @@ onMounted(() => {
   background: var(--bg-color);
 }
 
-.replay-badge {
+.status-replay {
   background: var(--warning-color);
   color: #000;
   font-size: 0.75rem;
   font-weight: 600;
-  padding: 0.125rem 0.5rem;
+  padding: 0.25rem 0.5rem;
   border-radius: 4px;
+}
+
+.btn-live {
+  background: var(--success-color);
+  color: #fff;
+  border: none;
+  padding: 0.25rem 0.75rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.btn-live:hover {
+  opacity: 0.9;
 }
 </style>
