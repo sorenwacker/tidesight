@@ -17,6 +17,21 @@ function formatEta(eta: string | null): string {
   })
 }
 
+function formatWindow(window: string | null, eta: string | null): string {
+  if (!window) return formatEta(eta)
+  const windowTime = new Date(window)
+  const etaTime = eta ? new Date(eta) : null
+  const time = windowTime.toLocaleTimeString('en-GB', {
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+  // Show waiting indicator if vessel arrives before window
+  if (etaTime && etaTime < windowTime) {
+    return `${time} (wait)`
+  }
+  return time
+}
+
 function formatDistance(distance: number | null): string {
   if (distance === null) return '-'
   return `${distance.toFixed(1)}`
@@ -37,7 +52,7 @@ function handleClick(vessel: Vessel) {
             <th>Name</th>
             <th>Length</th>
             <th>Dist</th>
-            <th>ETA</th>
+            <th>Entry</th>
           </tr>
         </thead>
         <tbody>
@@ -49,7 +64,7 @@ function handleClick(vessel: Vessel) {
             </td>
             <td>{{ vessel.loa_m?.toFixed(0) || '-' }}m</td>
             <td>{{ formatDistance(vessel.distance_km) }}km</td>
-            <td>{{ formatEta(vessel.eta) }}</td>
+            <td>{{ formatWindow(vessel.target_window, vessel.eta) }}</td>
           </tr>
         </tbody>
       </table>
