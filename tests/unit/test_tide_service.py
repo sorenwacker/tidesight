@@ -158,8 +158,8 @@ class TestTideService:
         assert high_tides[0]["peak_level_cm"] == 120
 
     @pytest.mark.asyncio
-    async def test_fetch_predictions_api_error_uses_fallback(self, respx_mock) -> None:
-        """Fall back to synthetic data on API error."""
+    async def test_fetch_predictions_api_error(self, respx_mock) -> None:
+        """Handle API error gracefully."""
         respx_mock.get("https://waterinfo.rws.nl/api/chart/get").mock(
             return_value=Response(500)
         )
@@ -167,9 +167,8 @@ class TestTideService:
         service = TideService()
         predictions, high_tides = await service.fetch_predictions()
 
-        # Should return synthetic data instead of empty
-        assert len(predictions) > 0
-        assert len(high_tides) > 0
+        assert predictions == []
+        assert high_tides == []
 
 
 @pytest.fixture

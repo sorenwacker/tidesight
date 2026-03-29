@@ -1,6 +1,5 @@
-"""Tide service for fetching tidal predictions."""
+"""Tide service for fetching tidal predictions from RWS."""
 
-import math
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -38,41 +37,6 @@ def parse_rws_response(raw_data: dict[str, Any]) -> list[dict[str, Any]]:
                 "timestamp": timestamp,
                 "water_level_cm": water_level,
             })
-
-    return predictions
-
-
-def generate_tidal_predictions(hours: int = 48) -> list[dict[str, Any]]:
-    """Generate synthetic tidal predictions based on semi-diurnal tide model.
-
-    Hoek van Holland has semi-diurnal tides with ~12.4 hour period.
-    Mean high water springs: ~200cm NAP
-    Mean low water springs: ~-150cm NAP
-
-    Args:
-        hours: Number of hours to generate predictions for.
-
-    Returns:
-        List of predictions with timestamp and water_level_cm.
-    """
-    now = datetime.now(timezone.utc)
-    predictions = []
-
-    # Semi-diurnal tide parameters for Hoek van Holland
-    period_hours = 12.42  # Lunar semi-diurnal period
-    amplitude = 175  # cm (half of tidal range)
-    mean_level = 25  # cm above NAP
-
-    for minutes in range(0, hours * 60, 10):  # 10-minute intervals
-        timestamp = now + timedelta(minutes=minutes)
-        # Simple sinusoidal model
-        phase = (2 * math.pi * minutes / 60) / period_hours
-        water_level = mean_level + amplitude * math.sin(phase)
-
-        predictions.append({
-            "timestamp": timestamp,
-            "water_level_cm": round(water_level, 1),
-        })
 
     return predictions
 
@@ -122,8 +86,8 @@ def find_high_tides(
 class TideService:
     """Service for fetching and processing tidal predictions.
 
-    Attempts to fetch from Rijkswaterstaat WaterInfo API, falls back
-    to synthetic data if unavailable.
+    Connects to the Rijkswaterstaat WaterInfo API to fetch astronomical
+    tide predictions for Hoek van Holland.
 
     Attributes:
         api_url: Base URL for WaterInfo API.
@@ -151,7 +115,7 @@ class TideService:
     async def fetch_predictions(
         self,
     ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-        """Fetch tidal predictions from RWS API or generate synthetic data.
+        """Fetch tidal predictions from RWS API.
 
         Returns:
             Tuple of (predictions, high_tides) where predictions is the
@@ -171,17 +135,14 @@ class TideService:
                     timeout=30.0,
                 )
 
-                if response.status_code == 200:
-                    raw_data = response.json()
-                    predictions = parse_rws_response(raw_data)
-                    if predictions:
-                        high_tides = find_high_tides(predictions, self.window_hours)
-                        return predictions, high_tides
+                if response.status_code != 200:
+                    return [], []
+
+                raw_data = response.json()
+                predictions = parse_rws_response(raw_data)
+                high_tides = find_high_tides(predictions, self.window_hours)
+
+                return predictions, high_tides
 
         except httpx.HTTPError:
-            pass
-
-        # Fall back to synthetic data
-        predictions = generate_tidal_predictions(hours=48)
-        high_tides = find_high_tides(predictions, self.window_hours)
-        return predictions, high_tides
+            return [], []
