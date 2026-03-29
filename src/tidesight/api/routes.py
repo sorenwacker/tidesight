@@ -20,8 +20,9 @@ from tidesight.api.schemas import (
     VesselResponse,
 )
 from tidesight.db.database import get_session
-from tidesight.models import Alert, HighTideWindow, TidePrediction, Vessel, VesselPosition
+from tidesight.models import Alert, Vessel, VesselPosition
 from tidesight.services.predictor import calculate_distance_to_entry
+from tidesight.services.tide_service import TideService
 
 router = APIRouter(prefix="/api")
 
@@ -237,57 +238,36 @@ async def get_vessel_trajectory(
 @router.get("/tides", response_model=TideResponse)
 async def get_tides(
     hours: int = Query(48, ge=1, le=168, description="Hours of predictions"),
-    session: AsyncSession = Depends(get_session),
 ) -> TideResponse:
     """Get tidal predictions for Hoek van Holland.
 
     Args:
         hours: Number of hours of predictions to return.
-        session: Database session.
 
     Returns:
         Tidal predictions and high tide windows.
     """
-    now = datetime.now(timezone.utc)
-    end_time = now + timedelta(hours=hours)
-
-    # Get predictions
-    pred_query = (
-        select(TidePrediction)
-        .where(TidePrediction.timestamp >= now)
-        .where(TidePrediction.timestamp <= end_time)
-        .order_by(TidePrediction.timestamp)
-    )
-    pred_result = await session.execute(pred_query)
-    predictions = pred_result.scalars().all()
-
-    # Get high tide windows
-    window_query = (
-        select(HighTideWindow)
-        .where(HighTideWindow.peak_time >= now)
-        .order_by(HighTideWindow.peak_time)
-    )
-    window_result = await session.execute(window_query)
-    windows = window_result.scalars().all()
+    tide_service = TideService()
+    predictions, high_tides = await tide_service.fetch_predictions()
 
     return TideResponse(
         location="Hoek van Holland",
         reference="NAP",
         predictions=[
             TidePredictionResponse(
-                timestamp=p.timestamp,
-                water_level_cm=p.water_level_cm,
+                timestamp=p["timestamp"],
+                water_level_cm=p["water_level_cm"],
             )
             for p in predictions
         ],
         high_tides=[
             HighTideWindowResponse(
-                timestamp=w.peak_time,
-                water_level_cm=w.peak_level_cm,
-                window_start=w.window_start,
-                window_end=w.window_end,
+                timestamp=w["peak_time"],
+                water_level_cm=w["peak_level_cm"],
+                window_start=w["window_start"],
+                window_end=w["window_end"],
             )
-            for w in windows
+            for w in high_tides
         ],
     )
 
