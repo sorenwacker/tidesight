@@ -1,0 +1,26 @@
+site_name: Tidesight
+site_description: Large vessel arrival prediction for Port of Rotterdam
+site_author: Tidesight Contributors
+
+theme:
+  name: material
+  palette:
+    primary: blue
+    accent: light-blue
+  features:
+    - navigation.sections
+    - navigation.expand
+    - content.code.copy
+
+nav:
+  - Home: index.md
+  - Architecture: architecture.md
+  - API Reference: api-reference.md
+  - User Guide: user-guide.md
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+  - admonition
+  - tables
