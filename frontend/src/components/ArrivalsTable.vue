@@ -36,8 +36,8 @@ function handleClick(vessel: Vessel) {
           <tr>
             <th>Name</th>
             <th>Length</th>
-            <th>Draft</th>
             <th>Dist</th>
+            <th>ETA</th>
           </tr>
         </thead>
         <tbody>
@@ -48,8 +48,8 @@ function handleClick(vessel: Vessel) {
               </a>
             </td>
             <td>{{ vessel.loa_m?.toFixed(0) || '-' }}m</td>
-            <td>{{ vessel.draft_m?.toFixed(1) || '-' }}m</td>
             <td>{{ formatDistance(vessel.distance_km) }}km</td>
+            <td>{{ formatEta(vessel.eta) }}</td>
           </tr>
         </tbody>
       </table>
