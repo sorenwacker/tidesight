@@ -93,11 +93,12 @@ function handleReplayFrame(frameVessels: Vessel[]) {
   replayVessels.value = frameVessels
 }
 
-function handleReplayStop() {
+async function handleReplayStop() {
+  // Fetch fresh live data before switching out of replay mode
+  // This prevents showing stale positions that cause jumps
+  await fetchVessels()
   isReplayMode.value = false
   replayVessels.value = []
-  // Refresh live data
-  fetchVessels()
 }
 
 // Throttle WebSocket updates
