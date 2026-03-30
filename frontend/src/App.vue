@@ -16,6 +16,7 @@ const mapRef = ref<InstanceType<typeof VesselMap> | null>(null)
 const largeOnly = ref(true)  // Default: only show large vessels
 const isReplayMode = ref(false)
 const replayVessels = shallowRef<Vessel[]>([])
+const initialLoadDone = ref(false)
 
 const { connected, messages } = useWebSocket()
 
@@ -155,8 +156,9 @@ watch(messages, (newMessages) => {
   }
 }, { deep: true })
 
-onMounted(() => {
-  fetchVessels()
+onMounted(async () => {
+  await fetchVessels()
+  initialLoadDone.value = true
   fetchTides()
   fetchAlerts()
 
@@ -194,7 +196,8 @@ onMounted(() => {
 
     <main class="main-content">
       <div class="map-container">
-        <VesselMap ref="mapRef" :vessels="vessels" />
+        <VesselMap v-if="initialLoadDone" ref="mapRef" :vessels="vessels" />
+        <div v-else class="loading-map">Loading vessels...</div>
       </div>
 
       <div class="side-panel">
@@ -260,6 +263,14 @@ onMounted(() => {
   font-weight: 600;
   padding: 0.25rem 0.5rem;
   border-radius: 4px;
+}
+
+.loading-map {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-muted);
 }
 
 </style>
