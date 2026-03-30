@@ -330,7 +330,11 @@ async def get_replay_data(
             vessel_positions[p.mmsi] = []
 
         vessel_info = vessels_db.get(p.mmsi)
-        vessel_positions[p.mmsi].append((p.timestamp, {
+        # Ensure timestamp is timezone-aware (UTC)
+        ts = p.timestamp
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=timezone.utc)
+        vessel_positions[p.mmsi].append((ts, {
             "mmsi": p.mmsi,
             "name": vessel_info.name if vessel_info else None,
             "lat": p.lat,
