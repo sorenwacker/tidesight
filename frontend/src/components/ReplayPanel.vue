@@ -20,22 +20,43 @@ const isLoading = ref(false)
 const replayData = ref<ReplayData | null>(null)
 const frameIndex = ref(0)
 const isPlaying = ref(false)
+const replayHours = ref(1)
+
+const hourOptions = [
+  { value: 1, label: '1 hour' },
+  { value: 6, label: '6 hours' },
+  { value: 12, label: '12 hours' },
+  { value: 24, label: '24 hours' },
+]
 
 let timer: number | null = null
+let abortController: AbortController | null = null
 
 const inReplay = computed(() => replayData.value !== null)
 const frameCount = computed(() => replayData.value?.frames.length || 0)
-const currentTime = computed(() => {
+const currentDateTime = computed(() => {
   if (!replayData.value || frameCount.value === 0) return ''
-  return new Date(replayData.value.frames[frameIndex.value].timestamp)
-    .toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+  const d = new Date(replayData.value.frames[frameIndex.value].timestamp)
+  const yy = String(d.getFullYear()).slice(2)
+  const mm = String(d.getMonth() + 1).padStart(2, '0')
+  const dd = String(d.getDate()).padStart(2, '0')
+  const time = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+  return `${yy}${mm}${dd} ${time}`
+})
+
+const progressPercent = computed(() => {
+  if (frameCount.value <= 1) return 0
+  return (frameIndex.value / (frameCount.value - 1)) * 100
 })
 
 async function startReplay() {
   isLoading.value = true
+  abortController = new AbortController()
   try {
-    const res = await fetch('/api/replay?hours=1')
+    const res = await fetch(`/api/replay?hours=${replayHours.value}`, { signal: abortController.signal })
     const data = await res.json()
+    isLoading.value = false
+    abortController = null
     if (data.frames && data.frames.length > 0) {
       replayData.value = data
       frameIndex.value = 0
@@ -43,7 +64,17 @@ async function startReplay() {
       play()
     }
   } catch (e) {
-    console.error('Replay failed:', e)
+    isLoading.value = false
+    abortController = null
+    if ((e as Error).name !== 'AbortError') {
+      console.error('Replay failed:', e)
+    }
+  }
+}
+
+function cancelLoading() {
+  if (abortController) {
+    abortController.abort()
   }
   isLoading.value = false
 }
@@ -55,6 +86,7 @@ function showFrame() {
 }
 
 function play() {
+  if (timer) clearInterval(timer)
   isPlaying.value = true
   timer = window.setInterval(() => {
     if (frameIndex.value < frameCount.value - 1) {
@@ -63,7 +95,7 @@ function play() {
     } else {
       backToLive()
     }
-  }, 800)
+  }, 400)
 }
 
 function pause() {
@@ -87,19 +119,35 @@ function onSlide(e: Event) {
 
 <template>
   <div class="replay">
-    <template v-if="!inReplay">
-      <button @click="startReplay" :disabled="isLoading" class="btn-replay">
-        {{ isLoading ? 'Loading...' : 'Replay Last Hour' }}
-      </button>
+    <template v-if="!inReplay && !isLoading">
+      <div class="replay-options">
+        <select v-model="replayHours" class="hours-select">
+          <option v-for="opt in hourOptions" :key="opt.value" :value="opt.value">
+            {{ opt.label }}
+          </option>
+        </select>
+        <button @click="startReplay" class="btn-replay">
+          Replay
+        </button>
+      </div>
+    </template>
+    <template v-else-if="isLoading">
+      <div class="loading">
+        <span>Loading replay data...</span>
+        <button type="button" @click="cancelLoading" class="btn-cancel">Cancel</button>
+      </div>
     </template>
     <template v-else>
       <div class="replay-active">
-        <span class="time">{{ currentTime }}</span>
-        <input type="range" :min="0" :max="frameCount - 1" :value="frameIndex" @input="onSlide" />
+        <span class="datetime">{{ currentDateTime }}</span>
+        <div class="progress-container">
+          <div class="progress-bar" :style="{ width: progressPercent + '%' }"></div>
+        </div>
+        <input type="range" class="slider" :min="0" :max="frameCount - 1" :value="frameIndex" @input="onSlide" />
         <div class="btns">
-          <button v-if="isPlaying" @click="pause">Pause</button>
-          <button v-else @click="play">Play</button>
-          <button @click="backToLive" class="btn-live">Live</button>
+          <button v-if="isPlaying" type="button" @click="pause">Pause</button>
+          <button v-else type="button" @click="play">Play</button>
+          <button type="button" @click="backToLive" class="btn-live">Live</button>
         </div>
       </div>
     </template>
@@ -114,8 +162,23 @@ function onSlide(e: Event) {
   margin-top: 0.5rem;
 }
 
+.replay-options {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.hours-select {
+  flex: 1;
+  padding: 0.5rem;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--card-bg);
+  color: var(--text-color);
+  cursor: pointer;
+}
+
 .btn-replay {
-  width: 100%;
+  flex: 1;
   padding: 0.5rem;
   background: var(--primary-color);
   color: white;
@@ -128,20 +191,53 @@ function onSlide(e: Event) {
   opacity: 0.5;
 }
 
+.loading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.btn-cancel {
+  padding: 0.25rem 0.5rem;
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-color);
+  cursor: pointer;
+}
+
 .replay-active {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
 }
 
-.time {
+.datetime {
   text-align: center;
   font-weight: bold;
   font-size: 1.1rem;
+  font-variant-numeric: tabular-nums;
 }
 
-input[type="range"] {
+.progress-container {
   width: 100%;
+  height: 12px;
+  background: #ddd;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.progress-bar {
+  height: 100%;
+  background: #22c55e;
+  border-radius: 6px;
+}
+
+.slider {
+  width: 100%;
+  margin: 0;
+  cursor: pointer;
 }
 
 .btns {

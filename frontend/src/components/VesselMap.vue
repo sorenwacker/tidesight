@@ -19,7 +19,7 @@ const animations = new Map<number, { startLat: number; startLon: number; endLat:
 // Hoek van Holland center
 const CENTER: L.LatLngTuple = [51.98, 4.1]
 const ZOOM = 10
-const ANIMATION_DURATION = 750 // ms - slightly under 800ms frame interval for smooth replay
+const ANIMATION_DURATION = 380 // ms - slightly under 400ms frame interval for smooth replay
 
 function animateMarkers() {
   const now = performance.now()

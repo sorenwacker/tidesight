@@ -351,12 +351,12 @@ async def get_replay_data(
     for mmsi in vessel_positions:
         vessel_positions[mmsi].sort(key=lambda x: x[0])
 
-    # Generate regular frame timestamps every 30 seconds
+    # Generate regular frame timestamps every 15 seconds for smoother playback
     frame_timestamps = []
-    current = start_time.replace(second=(start_time.second // 30) * 30, microsecond=0)
+    current = start_time.replace(second=(start_time.second // 15) * 15, microsecond=0)
     while current <= end_time:
         frame_timestamps.append(current)
-        current += timedelta(seconds=30)
+        current += timedelta(seconds=15)
 
     # Build frames with interpolated positions for all vessels seen so far
     frames = []
