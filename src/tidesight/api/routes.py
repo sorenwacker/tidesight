@@ -21,7 +21,11 @@ from tidesight.api.schemas import (
 )
 from tidesight.db.database import get_session
 from tidesight.models import Alert, Vessel, VesselPosition
-from tidesight.services.predictor import calculate_distance_to_entry
+from tidesight.services.predictor import (
+    calculate_distance_to_entry,
+    calculate_eta,
+    is_heading_towards_entry,
+)
 from tidesight.services.tide_service import TideService
 
 router = APIRouter(prefix="/api")
@@ -260,6 +264,29 @@ async def get_vessel_trajectory(
     )
 
 
+def interpolate_angle(a1: float | None, a2: float | None, t: float) -> float | None:
+    """Interpolate between two angles, taking shortest path around the circle.
+
+    Args:
+        a1: Start angle in degrees (0-360).
+        a2: End angle in degrees (0-360).
+        t: Interpolation factor (0-1).
+
+    Returns:
+        Interpolated angle in degrees (0-360), or None if both inputs are None.
+    """
+    if a1 is None and a2 is None:
+        return None
+    if a1 is None:
+        return a2
+    if a2 is None:
+        return a1
+
+    # Calculate shortest angular distance
+    diff = ((a2 - a1 + 180) % 360) - 180
+    return (a1 + diff * t) % 360
+
+
 @router.get("/replay", response_model=ReplayResponse)
 async def get_replay_data(
     hours: int = Query(6, ge=1, le=48, description="Hours of history to replay"),
@@ -268,6 +295,8 @@ async def get_replay_data(
     """Get historical position data for replay.
 
     Returns position snapshots grouped by timestamp for replay visualization.
+    Generates frames at regular 30-second intervals with all vessels interpolated
+    to their positions at each frame time.
 
     Args:
         hours: Number of hours of history to return.
@@ -293,16 +322,15 @@ async def get_replay_data(
     vessel_result = await session.execute(vessel_query)
     vessels_db = {v.mmsi: v for v in vessel_result.scalars().all()}
 
-    # Group positions by timestamp (rounded to nearest 30 seconds)
-    frames_dict: dict[datetime, list[dict]] = {}
+    # Collect all positions per vessel with their actual timestamps
+    vessel_positions: dict[int, list[tuple[datetime, dict]]] = {}
+
     for p in positions:
-        # Round timestamp to 30 second intervals
-        ts = p.timestamp.replace(second=(p.timestamp.second // 30) * 30, microsecond=0)
-        if ts not in frames_dict:
-            frames_dict[ts] = []
+        if p.mmsi not in vessel_positions:
+            vessel_positions[p.mmsi] = []
 
         vessel_info = vessels_db.get(p.mmsi)
-        frames_dict[ts].append({
+        vessel_positions[p.mmsi].append((p.timestamp, {
             "mmsi": p.mmsi,
             "name": vessel_info.name if vessel_info else None,
             "lat": p.lat,
@@ -313,13 +341,74 @@ async def get_replay_data(
             "is_large": vessel_info.is_large if vessel_info else False,
             "loa_m": vessel_info.loa_m if vessel_info else None,
             "draft_m": vessel_info.draft_m if vessel_info else None,
-        })
+        }))
 
-    # Convert to sorted frames
-    frames = [
-        ReplayFrame(timestamp=ts, vessels=vessels)
-        for ts, vessels in sorted(frames_dict.items())
-    ]
+    # Sort positions per vessel by timestamp
+    for mmsi in vessel_positions:
+        vessel_positions[mmsi].sort(key=lambda x: x[0])
+
+    # Generate regular frame timestamps every 30 seconds
+    frame_timestamps = []
+    current = start_time.replace(second=(start_time.second // 30) * 30, microsecond=0)
+    while current <= end_time:
+        frame_timestamps.append(current)
+        current += timedelta(seconds=30)
+
+    # Build frames with interpolated positions for all vessels seen so far
+    frames = []
+    for ts in frame_timestamps:
+        frame_vessels = []
+
+        for mmsi, pos_list in vessel_positions.items():
+            # Find surrounding positions for interpolation
+            before = None
+            after = None
+            for i, (t, data) in enumerate(pos_list):
+                if t <= ts:
+                    before = (t, data)
+                if t > ts and after is None:
+                    after = (t, data)
+                    break
+
+            if before is None:
+                continue  # Vessel not yet seen at this time
+
+            if after is None or before[0] == ts:
+                # No interpolation needed, use last known position
+                v = before[1].copy()
+            else:
+                # Interpolate between before and after
+                total_seconds = (after[0] - before[0]).total_seconds()
+                elapsed_seconds = (ts - before[0]).total_seconds()
+                t_factor = elapsed_seconds / total_seconds if total_seconds > 0 else 0
+
+                v = before[1].copy()
+                v["lat"] = before[1]["lat"] + (after[1]["lat"] - before[1]["lat"]) * t_factor
+                v["lon"] = before[1]["lon"] + (after[1]["lon"] - before[1]["lon"]) * t_factor
+                v["heading"] = interpolate_angle(
+                    before[1]["heading"], after[1]["heading"], t_factor
+                )
+                v["cog"] = interpolate_angle(
+                    before[1]["cog"], after[1]["cog"], t_factor
+                )
+                # Interpolate speed linearly
+                speed1 = before[1]["speed_knots"] or 0
+                speed2 = after[1]["speed_knots"] or 0
+                v["speed_knots"] = speed1 + (speed2 - speed1) * t_factor
+
+            # Calculate distance and ETA for interpolated position
+            v["distance_km"] = calculate_distance_to_entry(v["lat"], v["lon"])
+            cog = v.get("cog")
+            speed = v.get("speed_knots") or 0
+            if speed > 0.5 and is_heading_towards_entry(v["lat"], v["lon"], cog):
+                eta_dt = calculate_eta(v["lat"], v["lon"], speed, current_time=ts)
+                v["eta"] = eta_dt.isoformat() if eta_dt else None
+            else:
+                v["eta"] = None
+
+            frame_vessels.append(v)
+
+        frames.append(ReplayFrame(timestamp=ts, vessels=frame_vessels))
 
     return ReplayResponse(
         start_time=start_time,

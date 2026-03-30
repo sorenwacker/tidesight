@@ -14,10 +14,53 @@ const emit = defineEmits<{
 const mapContainer = ref<HTMLDivElement | null>(null)
 let map: L.Map | null = null
 const markers = new Map<number, L.Marker>()
+const animations = new Map<number, { startLat: number; startLon: number; endLat: number; endLon: number; startTime: number }>()
 
 // Hoek van Holland center
 const CENTER: L.LatLngTuple = [51.98, 4.1]
 const ZOOM = 10
+const ANIMATION_DURATION = 750 // ms - slightly under 800ms frame interval for smooth replay
+
+function animateMarkers() {
+  const now = performance.now()
+
+  for (const [mmsi, anim] of animations) {
+    const marker = markers.get(mmsi)
+    if (!marker) continue
+
+    const elapsed = now - anim.startTime
+    const progress = Math.min(elapsed / ANIMATION_DURATION, 1)
+    // Ease out cubic for smooth deceleration
+    const eased = 1 - Math.pow(1 - progress, 3)
+
+    const lat = anim.startLat + (anim.endLat - anim.startLat) * eased
+    const lon = anim.startLon + (anim.endLon - anim.startLon) * eased
+
+    marker.setLatLng([lat, lon])
+
+    if (progress >= 1) {
+      animations.delete(mmsi)
+    }
+  }
+
+  if (animations.size > 0) {
+    requestAnimationFrame(animateMarkers)
+  }
+}
+
+function startAnimation(mmsi: number, startLat: number, startLon: number, endLat: number, endLon: number) {
+  const wasEmpty = animations.size === 0
+  animations.set(mmsi, {
+    startLat,
+    startLon,
+    endLat,
+    endLon,
+    startTime: performance.now(),
+  })
+  if (wasEmpty) {
+    requestAnimationFrame(animateMarkers)
+  }
+}
 
 function createMarkerIcon(isLarge: boolean, heading: number | null, cog: number | null, speed: number): L.DivIcon {
   const color = isLarge ? '#dc2626' : '#2563eb'
@@ -79,7 +122,13 @@ function updateMarkers() {
     const existing = markers.get(vessel.mmsi)
 
     if (existing) {
-      existing.setLatLng([vessel.lat, vessel.lon])
+      const currentPos = existing.getLatLng()
+      // Only animate if position changed significantly
+      const latDiff = Math.abs(currentPos.lat - vessel.lat)
+      const lonDiff = Math.abs(currentPos.lng - vessel.lon)
+      if (latDiff > 0.0001 || lonDiff > 0.0001) {
+        startAnimation(vessel.mmsi, currentPos.lat, currentPos.lng, vessel.lat, vessel.lon)
+      }
       existing.setIcon(createMarkerIcon(vessel.is_large, vessel.heading, vessel.cog, vessel.speed_knots))
       existing.setPopupContent(formatVesselPopup(vessel))
     } else {

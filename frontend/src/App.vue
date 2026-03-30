@@ -49,9 +49,6 @@ const largeVessels = computed(() =>
     .slice(0, 50)
 )
 
-const vesselCount = computed(() => vesselMap.value.size)
-const largeCount = computed(() => largeVessels.value.length)
-
 async function fetchVessels() {
   try {
     const response = await fetch('/api/vessels?max_age_minutes=30&limit=300')
@@ -93,12 +90,7 @@ function handleLocate(vessel: Vessel) {
 
 function handleReplayFrame(frameVessels: Vessel[]) {
   isReplayMode.value = true
-  // Merge vessels instead of replacing to avoid blinking
-  const newMap = new Map(replayVessels.value.map(v => [v.mmsi, v]))
-  for (const vessel of frameVessels) {
-    newMap.set(vessel.mmsi, vessel)
-  }
-  replayVessels.value = Array.from(newMap.values())
+  replayVessels.value = frameVessels
 }
 
 function handleReplayStop() {
@@ -150,7 +142,7 @@ watch(messages, (newMessages) => {
       break
 
     case 'alert_created':
-      alerts.value.unshift(latest.data as Alert)
+      alerts.value.unshift(latest.data as unknown as Alert)
       break
 
     case 'alert_resolved':
@@ -184,7 +176,6 @@ onMounted(() => {
           <span>Large only</span>
         </label>
         <span class="stat">{{ vessels.length }} shown</span>
-        <button v-if="isReplayMode" class="btn-live" @click="handleReplayStop">Back to Live</button>
       </div>
       <div class="header-right">
         <button class="theme-toggle" @click="toggleDarkMode" :title="darkMode ? 'Light mode' : 'Dark mode'">
@@ -270,18 +261,4 @@ onMounted(() => {
   border-radius: 4px;
 }
 
-.btn-live {
-  background: var(--success-color);
-  color: #fff;
-  border: none;
-  padding: 0.25rem 0.75rem;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 0.75rem;
-  font-weight: 500;
-}
-
-.btn-live:hover {
-  opacity: 0.9;
-}
 </style>
