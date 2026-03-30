@@ -19,7 +19,8 @@ const animations = new Map<number, { startLat: number; startLon: number; endLat:
 // Hoek van Holland center
 const CENTER: L.LatLngTuple = [51.98, 4.1]
 const ZOOM = 10
-const ANIMATION_DURATION = 380 // ms - slightly under 400ms frame interval for smooth replay
+const ANIMATION_DURATION = 400 // ms - matches frame interval exactly for continuous motion
+let animationRunning = false
 
 function animateMarkers() {
   const now = performance.now()
@@ -29,12 +30,11 @@ function animateMarkers() {
     if (!marker) continue
 
     const elapsed = now - anim.startTime
+    // Linear interpolation for constant velocity (no pauses)
     const progress = Math.min(elapsed / ANIMATION_DURATION, 1)
-    // Ease out cubic for smooth deceleration
-    const eased = 1 - Math.pow(1 - progress, 3)
 
-    const lat = anim.startLat + (anim.endLat - anim.startLat) * eased
-    const lon = anim.startLon + (anim.endLon - anim.startLon) * eased
+    const lat = anim.startLat + (anim.endLat - anim.startLat) * progress
+    const lon = anim.startLon + (anim.endLon - anim.startLon) * progress
 
     marker.setLatLng([lat, lon])
 
@@ -45,11 +45,29 @@ function animateMarkers() {
 
   if (animations.size > 0) {
     requestAnimationFrame(animateMarkers)
+  } else {
+    animationRunning = false
   }
 }
 
 function startAnimation(mmsi: number, startLat: number, startLon: number, endLat: number, endLon: number) {
-  const wasEmpty = animations.size === 0
+  // If animation already running for this vessel, update target from current position
+  const existing = animations.get(mmsi)
+  if (existing) {
+    const marker = markers.get(mmsi)
+    if (marker) {
+      const pos = marker.getLatLng()
+      animations.set(mmsi, {
+        startLat: pos.lat,
+        startLon: pos.lng,
+        endLat,
+        endLon,
+        startTime: performance.now(),
+      })
+      return
+    }
+  }
+
   animations.set(mmsi, {
     startLat,
     startLon,
@@ -57,7 +75,9 @@ function startAnimation(mmsi: number, startLat: number, startLon: number, endLat
     endLon,
     startTime: performance.now(),
   })
-  if (wasEmpty) {
+
+  if (!animationRunning) {
+    animationRunning = true
     requestAnimationFrame(animateMarkers)
   }
 }
