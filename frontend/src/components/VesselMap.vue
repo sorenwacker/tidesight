@@ -51,20 +51,14 @@ function animateMarkers() {
 }
 
 function startAnimation(mmsi: number, startLat: number, startLon: number, endLat: number, endLon: number) {
-  // If animation already running for this vessel, update target from current position
+  // If animation already exists for this vessel, update from current marker position
   const existing = animations.get(mmsi)
   if (existing) {
     const marker = markers.get(mmsi)
     if (marker) {
       const pos = marker.getLatLng()
-      animations.set(mmsi, {
-        startLat: pos.lat,
-        startLon: pos.lng,
-        endLat,
-        endLon,
-        startTime: performance.now(),
-      })
-      return
+      startLat = pos.lat
+      startLon = pos.lng
     }
   }
 
